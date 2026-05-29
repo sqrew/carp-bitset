@@ -39,6 +39,21 @@
             (BitSet.for-each-set &(fn [idx] (Pointer.set sum-ptr (+ (Pointer.to-value sum-ptr) @idx))) &bs))
           (set! state (assert-equal &state 9 sum "for-each-set works"))))
 
+      ;; Copy and Equals
+      (let [bs_copy (copy &bs)]
+        (do
+          (set! state (assert-true &state (= &bs &bs_copy) "Copy is equal to original"))
+          (BitSet.add! &bs_copy 10)
+          (set! state (assert-false &state (= &bs &bs_copy) "Modified copy is not equal to original"))
+          
+          ;; Semantic equality with different capacities
+          (let [bs_large (BitSet.with-capacity 200)]
+            (do
+              (BitSet.add! &bs_large 1)
+              (BitSet.add! &bs_large 3)
+              (BitSet.add! &bs_large 5)
+              (set! state (assert-true &state (= &bs &bs_large) "Semantic equality handles different capacities"))))))
+
       ;; Set Algebra
       (let [bs1 (BitSet.new)
             bs2 (BitSet.new)]
@@ -76,6 +91,16 @@
               (BitSet.union! &d &bs1)
               (BitSet.difference! &d &bs2)
               (set! state (assert-equal &state 1 (BitSet.count &d) "Difference works"))))
+              
+          ;; Symmetric Difference
+          (let [sd (BitSet.new)]
+            (do
+              (BitSet.union! &sd &bs1)
+              (BitSet.symmetric-difference! &sd &bs2)
+              (set! state (assert-equal &state 2 (BitSet.count &sd) "Symmetric Difference works"))
+              (set! state (assert-true &state (BitSet.contains? &sd 1) "SD contains 1"))
+              (set! state (assert-false &state (BitSet.contains? &sd 2) "SD doesn't contain 2"))
+              (set! state (assert-true &state (BitSet.contains? &sd 3) "SD contains 3"))))
         ))
 
       ;; Capacity logic

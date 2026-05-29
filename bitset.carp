@@ -21,6 +21,11 @@ It provides extremely compact storage for bit flags and fast set operations.")
           (Array.aset-uninitialized! &arr i (zero)))
         (BitSet.init arr))))
 
+  (doc copy "returns a deep copy of the BitSet.")
+  (defn copy [bs]
+    (BitSet.init (Array.copy (BitSet.words bs))))
+  (implements copy BitSet.copy)
+
   (defn- ensure-capacity! [bs word-idx]
     (let [words (BitSet.words bs)]
       (while (<= (Array.length words) word-idx)
@@ -111,7 +116,8 @@ It provides extremely compact storage for bit flags and fast set operations.")
                 (set! total (+ total c))))))
         total)))
 
-  (doc for-each-set "iterates over all indices of set bits in the bitset.")
+  (doc for-each-set "iterates over all indices of set bits in the bitset. 
+Complexity is currently $O(64 * words)$, which may be slow for very sparse sets.")
   (defn for-each-set [f bs]
     (let [words (BitSet.words bs)
           len (Array.length words)]
@@ -125,17 +131,43 @@ It provides extremely compact storage for bit flags and fast set operations.")
                   (let [idx (+ (* i 64) b)]
                     (~f &idx))))))))))
 
+  (doc equals? "checks if two bitsets represent the same set of bits.
+Handles cases where one bitset has more trailing zero words than the other.")
+  (defn equals? [a b]
+    (let [wa (BitSet.words a)
+          wb (BitSet.words b)
+          la (Array.length wa)
+          lb (Array.length wb)
+          min-l (if (< la lb) la lb)
+          res true]
+      (do
+        (for [i 0 min-l]
+          (unless (Uint64.= @(Array.unsafe-nth wa i) @(Array.unsafe-nth wb i))
+            (do (set! res false) (break))))
+        (when res
+          (if (> la lb)
+            (for [i lb la]
+              (unless (Uint64.= @(Array.unsafe-nth wa i) (zero))
+                (do (set! res false) (break))))
+            (when (< la lb)
+              (for [i la lb]
+                (unless (Uint64.= @(Array.unsafe-nth wb i) (zero))
+                  (do (set! res false) (break)))))))
+        res)))
+  (implements = BitSet.equals?)
+
   (doc union! "performs an in-place union with another BitSet. $O(n)$ complexity.")
   (defn union! [bs other]
     (let [other-words (BitSet.words other)
           other-len (Array.length other-words)]
-      (do
-        (BitSet.ensure-capacity! bs (dec other-len))
-        (let [words (BitSet.words bs)]
-          (for [i 0 other-len]
-            (let [w1 @(Array.unsafe-nth words i)
-                  w2 @(Array.unsafe-nth other-words i)]
-              (Array.aset! words i (bit-or w1 w2))))))))
+      (when (> other-len 0)
+        (do
+          (BitSet.ensure-capacity! bs (dec other-len))
+          (let [words (BitSet.words bs)]
+            (for [i 0 other-len]
+              (let [w1 @(Array.unsafe-nth words i)
+                    w2 @(Array.unsafe-nth other-words i)]
+                (Array.aset! words i (bit-or w1 w2)))))))))
 
   (doc intersection! "performs an in-place intersection with another BitSet. $O(n)$ complexity.")
   (defn intersection! [bs other]
@@ -163,13 +195,14 @@ It provides extremely compact storage for bit flags and fast set operations.")
   (defn symmetric-difference! [bs other]
     (let [other-words (BitSet.words other)
           other-len (Array.length other-words)]
-      (do
-        (BitSet.ensure-capacity! bs (dec other-len))
-        (let [words (BitSet.words bs)]
-          (for [i 0 other-len]
-            (let [w1 @(Array.unsafe-nth words i)
-                  w2 @(Array.unsafe-nth other-words i)]
-              (Array.aset! words i (bit-xor w1 w2))))))))
+      (when (> other-len 0)
+        (do
+          (BitSet.ensure-capacity! bs (dec other-len))
+          (let [words (BitSet.words bs)]
+            (for [i 0 other-len]
+              (let [w1 @(Array.unsafe-nth words i)
+                    w2 @(Array.unsafe-nth other-words i)]
+                (Array.aset! words i (bit-xor w1 w2)))))))))
 
   (doc subset? "checks if this bitset is a subset of another. $O(n)$ complexity (early exit).")
   (defn subset? [bs other]
