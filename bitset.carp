@@ -14,15 +14,17 @@ It provides extremely compact storage for bit flags and fast set operations.")
 
   (doc with-capacity "creates a new BitSet with space pre-allocated for at least `n` bits.")
   (defn with-capacity [n]
-    (let [num-words (+ 1 (/ n 64))]
-      (BitSet.init (Array.allocate num-words))))
+    (let [num-words (/ (+ n 63) 64)
+          arr (Array.allocate num-words)]
+      (do
+        (for [i 0 num-words]
+          (Array.aset-uninitialized! &arr i (zero)))
+        (BitSet.init arr))))
 
   (defn- ensure-capacity! [bs word-idx]
-    (let [words (BitSet.words bs)
-          current (Array.length words)]
-      (when (>= word-idx current)
-        (for [i current (inc word-idx)]
-          (Array.push-back! words (zero))))))
+    (let [words (BitSet.words bs)]
+      (while (<= (Array.length words) word-idx)
+        (Array.push-back! words (zero)))))
 
   (doc add! "sets the bit at the specified index to 1. $O(1)$ amortized.")
   (defn add! [bs id]
@@ -77,6 +79,18 @@ It provides extremely compact storage for bit flags and fast set operations.")
           len (Array.length words)]
       (for [i 0 len]
         (Array.aset! words i (zero)))))
+
+  (doc empty? "checks if the bitset has no bits set. $O(n)$ complexity (early exit).")
+  (defn empty? [bs]
+    (let [words (BitSet.words bs)
+          len (Array.length words)
+          res true]
+      (do
+        (for [i 0 len]
+          (unless (Uint64.= @(Array.unsafe-nth words i) (zero))
+            (do (set! res false) (break))))
+        res)))
+  (implements empty? BitSet.empty?)
 
   (doc count "returns the number of set bits (population count). $O(n)$ complexity.")
   (defn count [bs]
@@ -156,6 +170,36 @@ It provides extremely compact storage for bit flags and fast set operations.")
             (let [w1 @(Array.unsafe-nth words i)
                   w2 @(Array.unsafe-nth other-words i)]
               (Array.aset! words i (bit-xor w1 w2))))))))
+
+  (doc subset? "checks if this bitset is a subset of another. $O(n)$ complexity (early exit).")
+  (defn subset? [bs other]
+    (let [words (BitSet.words bs)
+          len (Array.length words)
+          other-words (BitSet.words other)
+          other-len (Array.length other-words)
+          res true]
+      (do
+        (for [i 0 len]
+          (let [w1 @(Array.unsafe-nth words i)
+                w2 (if (< i other-len) @(Array.unsafe-nth other-words i) (zero))]
+            (unless (Uint64.= (bit-and w1 w2) w1)
+              (do (set! res false) (break)))))
+        res)))
+
+  (doc intersects? "checks if this bitset and another have any common bits. $O(n)$ complexity (early exit).")
+  (defn intersects? [bs other]
+    (let [words (BitSet.words bs)
+          len (Array.length words)
+          other-words (BitSet.words other)
+          other-len (Array.length other-words)
+          res false]
+      (do
+        (for [i 0 (if (< len other-len) len other-len)]
+          (let [w1 @(Array.unsafe-nth words i)
+                w2 @(Array.unsafe-nth other-words i)]
+            (unless (Uint64.= (bit-and w1 w2) (zero))
+              (do (set! res true) (break)))))
+        res)))
 
   (doc shrink-to-fit! "removes trailing zero words to minimize memory usage.")
   (defn shrink-to-fit! [bs]
