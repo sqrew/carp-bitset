@@ -21,23 +21,9 @@ Add this to your project by loading `bitset.carp`.
 (use BitSet)
 ```
 
-## Usage
+## Examples
 
-```clojure
-(use BitSet)
-
-(let [bs (BitSet.new)]
-  (do
-    (BitSet.add! &bs 10)
-    (BitSet.add! &bs 100)
-    
-    (IO.println &(str (BitSet.contains? &bs 10))) ; true
-    (IO.println &(str (BitSet.count &bs)))        ; 2
-    
-    ;; Efficiently iterate over set indices
-    (BitSet.for-each-set &(fn [idx] (IO.println &(str @idx))) &bs)
-  ))
-```
+See [examples.md](examples.md) for usage examples.
 
 ## Running Tests
 
